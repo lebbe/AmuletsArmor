@@ -1422,7 +1422,7 @@ T_void SoundSetBackgroundMusic(T_byte8 *filename)
             sprintf(realFilename, "AAMUSIC\\%s.MUS", filename);
             file = FileOpen(realFilename, FILE_MODE_READ) ;
             if (file != FILE_BAD) {
-                length = FileGetSize(realFilename)/2;
+                length = FileGetSize(realFilename);
                 G_backgroundMusic = MemAlloc(length);
                 DebugCheck(G_backgroundMusic != 0);
                 MemCheck(8204);
