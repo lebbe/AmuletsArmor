@@ -1450,7 +1450,13 @@ T_void KeyboardUpdate(E_Boolean updateBuffers)
             scanCode = AA_KEY_SCANCODE(i);
 
             /* Record the state of the keypress */
-            newValue = (keys[i])?TRUE:FALSE ;
+            /* Left and right Alt share one scancode.  Treat it as down if either
+             * is, otherwise whichever of the two is scanned last overwrites the
+             * other's state on every update. */
+            if (scanCode == KEY_SCAN_CODE_ALT)
+                newValue = (keys[SDLK_LALT] || keys[SDLK_RALT])?TRUE:FALSE ;
+            else
+                newValue = (keys[i])?TRUE:FALSE ;
             changed = (newValue != G_keyTable[scanCode])?TRUE:FALSE ;
 
             /* Find keys that have changed */
