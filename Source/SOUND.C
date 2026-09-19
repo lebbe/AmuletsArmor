@@ -1467,8 +1467,16 @@ T_void SoundSetBackgroundMusic(T_byte8 *filename)
             }
 
             // Load the new music (even if we are not going to play it yet)
+<<<<<<< HEAD
             G_backgroundMusic = ILoadMusicData((char *)filename, &length);
             if (G_backgroundMusic) {
+=======
+            sprintf(realFilename, "AAMUSIC\\%s.MUS", filename);
+            file = FileOpen(realFilename, FILE_MODE_READ) ;
+            if (file != FILE_BAD) {
+                length = FileGetSize(realFilename);
+                G_backgroundMusic = MemAlloc(length);
+>>>>>>> 8a97c80d... Sound: play the whole background music file instead of only the first half
                 DebugCheck(G_backgroundMusic != 0);
                 G_backgroundMusicID = IAllocateBufferDirect(G_backgroundMusic, length) ;
                 if (G_backgroundMusicID != BUFFER_ID_BAD)  {
