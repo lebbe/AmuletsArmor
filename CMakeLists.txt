@@ -165,6 +165,7 @@ if(EMSCRIPTEN)
         -sFORCE_FILESYSTEM=1
         -sEXPORTED_RUNTIME_METHODS=FS,wasmTable
         -lidbfs.js
+        "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/Build/Emscripten/shell.html"
         "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/Exe@/game"
         "SHELL:--exclude-file *.exe" "SHELL:--exclude-file *.EXE"
         "SHELL:--exclude-file *.bat" "SHELL:--exclude-file *.386"
