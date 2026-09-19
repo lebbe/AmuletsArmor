@@ -1,5 +1,23 @@
 # Amulets & Armor
 
+> **About this fork.** This fork exists to maintain Amulets & Armor for the
+> [Amulets and Armor Web Portal](https://github.com/lebbe/AmuletsArmorWebPortal),
+> which runs the game in the browser through the Emscripten build (see
+> [`Build/Emscripten`](Build/Emscripten/README.md)).
+>
+> - `main` is this fork's branch: upstream plus the Emscripten build and our own features.
+> - `master` mirrors [ExiguusEntertainment/AmuletsArmor](https://github.com/ExiguusEntertainment/AmuletsArmor) `master` and is never committed to directly.
+>
+> We try to keep `main` up to date with upstream `master`. To sync:
+>
+> ```bash
+> git remote add upstream https://github.com/ExiguusEntertainment/AmuletsArmor.git   # once
+> git checkout master && git pull upstream master   # fast-forwards only
+> git push origin master
+> git checkout main && git merge master             # resolve conflicts, then test the Emscripten build
+> git push origin main
+> ```
+
 Amulets & Armor is a 1997 first person role playing game released as open source. The codebase is written primarily in C and builds for both DOS and Windows.
 
 ## Repository layout
