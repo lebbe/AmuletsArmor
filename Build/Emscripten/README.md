@@ -64,8 +64,10 @@ browser's IndexedDB. The game writes them relative to its working directory, so
 into it; no game code is involved. It syncs every few seconds, when the tab is
 hidden, and when the page is closed.
 
-- The storage is tied to the page's URL path. Serving the game from a different
-  path starts with empty saves.
+- The IndexedDB database is named after the mount point (`/persist`), so saves are
+  per origin (scheme, host and port): a different origin starts with empty saves,
+  a different path on the same origin does not. Any other page on the same origin
+  that mounts an IDBFS at `/persist` shares the same store.
 - Clearing the site's data in the browser deletes the saves.
 
 ## What differs from the native builds
