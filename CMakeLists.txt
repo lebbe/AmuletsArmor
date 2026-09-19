@@ -167,6 +167,10 @@ if(EMSCRIPTEN)
         -sSTACK_SIZE=1MB
         -sFORCE_FILESYSTEM=1
         -sEXPORTED_RUNTIME_METHODS=FS,wasmTable
+        # A factory (createAA(config)) instead of a global Module, so the game
+        # can be embedded in any page.
+        -sMODULARIZE=1
+        -sEXPORT_NAME=createAA
         -lidbfs.js
         "SHELL:--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/Build/Emscripten/shell.html"
         "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/Exe@/game"

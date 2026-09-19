@@ -150,6 +150,9 @@
   /* --- Loading: game data is fetched right away, but main() waits for the click, so
          the game opens its audio device inside a user gesture (browsers require that). --- */
   var started = false;
+  /* Configuration for the createAA() factory (the engine is built with MODULARIZE);
+     it is called after the engine script below. The factory fills in this same
+     object (FS, addRunDependency, ...). */
   var Module = window.Module = {
     canvas: $('canvas'),
     print: function (t) { if (window.console) console.log(t); },
@@ -203,5 +206,6 @@
 })();
 </script>
 {{{ SCRIPT }}}
+<script>createAA(window.Module);</script>
 </body>
 </html>
