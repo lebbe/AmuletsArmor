@@ -378,3 +378,12 @@ int SDL_main(int argc, char *argv[])
     return 0;
 }
 
+#if defined(TARGET_UNIX) && !defined(__APPLE__)
+/* SDL_main.h renames main to SDL_main; on Linux nothing links libSDLmain. */
+#undef main
+int main(int argc, char *argv[])
+{
+    return SDL_main(argc, argv);
+}
+#endif
+

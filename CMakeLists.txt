@@ -73,10 +73,25 @@ target_compile_definitions(${AA_EXE_NAME}
 
 target_compile_definitions(${AA_EXE_NAME} PRIVATE WIN_IPX=1)
 
-if(APPLE)
+if(UNIX)
     target_compile_definitions(${AA_EXE_NAME} PRIVATE TARGET_UNIX=1)
     target_compile_definitions(aa-character-dump PRIVATE TARGET_UNIX=1)
 
+    # Stand-ins for Windows/DOS headers (io.h, direct.h, conio.h, ...). Kept out
+    # of Include/ so they cannot shadow the real headers in the Visual Studio build.
+    target_include_directories(${AA_EXE_NAME} BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Include/unix")
+    target_include_directories(aa-character-dump BEFORE PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Include/unix")
+endif()
+
+if(UNIX AND NOT APPLE)
+    # Case-insensitive open()/fopen() (see Source/Unix/casefile.c). Fortify
+    # rewrites open() to __open_2, which would bypass the wrapper.
+    target_sources(${AA_EXE_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Unix/casefile.c")
+    target_compile_options(${AA_EXE_NAME} PRIVATE -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0)
+    target_link_options(${AA_EXE_NAME} PRIVATE -Wl,--wrap=open -Wl,--wrap=fopen)
+endif()
+
+if(APPLE)
     # sdl12-compat loads SDL2 dynamically; add Homebrew and pkg-config library
     # directories to the runtime search path so startup does not depend on shell env.
     set(AA_RPATH_DIRS
