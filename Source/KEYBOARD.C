@@ -1332,6 +1332,81 @@ const uint8_t G_sdlToScancode[] = {
 
 };
 
+#ifdef __EMSCRIPTEN__
+/* Emscripten's SDL 1.2 uses SDL2-style key codes: letters, digits and
+ * punctuation are still ASCII, but special keys are (scancode | 1<<10) and
+ * SDLK_LAST is far larger than the table above.  Build a table indexed by
+ * Emscripten's codes; the ASCII half is copied from G_sdlToScancode. */
+static uint8_t G_emKeyToScancode[SDLK_LAST];
+static E_Boolean G_emKeyToScancodeReady = FALSE;
+
+static T_void IKeyboardBuildEmscriptenTable(T_void)
+{
+    int i;
+
+    for (i = 0; i < 128; i++)
+        G_emKeyToScancode[i] = G_sdlToScancode[i];
+
+    G_emKeyToScancode[SDLK_KP_0] = KEY_SCAN_CODE_KEYPAD_0;
+    G_emKeyToScancode[SDLK_KP_1] = KEY_SCAN_CODE_KEYPAD_1;
+    G_emKeyToScancode[SDLK_KP_2] = KEY_SCAN_CODE_KEYPAD_2;
+    G_emKeyToScancode[SDLK_KP_3] = KEY_SCAN_CODE_KEYPAD_3;
+    G_emKeyToScancode[SDLK_KP_4] = KEY_SCAN_CODE_KEYPAD_4;
+    G_emKeyToScancode[SDLK_KP_5] = KEY_SCAN_CODE_KEYPAD_5;
+    G_emKeyToScancode[SDLK_KP_6] = KEY_SCAN_CODE_KEYPAD_6;
+    G_emKeyToScancode[SDLK_KP_7] = KEY_SCAN_CODE_KEYPAD_7;
+    G_emKeyToScancode[SDLK_KP_8] = KEY_SCAN_CODE_KEYPAD_8;
+    G_emKeyToScancode[SDLK_KP_9] = KEY_SCAN_CODE_KEYPAD_9;
+    G_emKeyToScancode[SDLK_KP_PERIOD] = KEY_SCAN_CODE_KEYPAD_PERIOD;
+    G_emKeyToScancode[SDLK_KP_DIVIDE] = KEY_SCAN_CODE_KEYPAD_SLASH;
+    G_emKeyToScancode[SDLK_KP_MULTIPLY] = KEY_SCAN_CODE_KEYPAD_STAR;
+    G_emKeyToScancode[SDLK_KP_MINUS] = KEY_SCAN_CODE_KEYPAD_MINUS;
+    G_emKeyToScancode[SDLK_KP_PLUS] = KEY_SCAN_CODE_KEYPAD_PLUS;
+    G_emKeyToScancode[SDLK_KP_ENTER] = KEY_SCAN_CODE_KEYPAD_ENTER;
+
+    G_emKeyToScancode[SDLK_UP] = KEY_SCAN_CODE_UP;
+    G_emKeyToScancode[SDLK_DOWN] = KEY_SCAN_CODE_DOWN;
+    G_emKeyToScancode[SDLK_RIGHT] = KEY_SCAN_CODE_RIGHT;
+    G_emKeyToScancode[SDLK_LEFT] = KEY_SCAN_CODE_LEFT;
+    G_emKeyToScancode[SDLK_INSERT] = KEY_SCAN_CODE_INSERT;
+    G_emKeyToScancode[SDLK_HOME] = KEY_SCAN_CODE_HOME;
+    G_emKeyToScancode[SDLK_END] = KEY_SCAN_CODE_END;
+    G_emKeyToScancode[SDLK_PAGEUP] = KEY_SCAN_CODE_PGUP;
+    G_emKeyToScancode[SDLK_PAGEDOWN] = KEY_SCAN_CODE_PGDN;
+
+    G_emKeyToScancode[SDLK_F1] = KEY_SCAN_CODE_F1;
+    G_emKeyToScancode[SDLK_F2] = KEY_SCAN_CODE_F2;
+    G_emKeyToScancode[SDLK_F3] = KEY_SCAN_CODE_F3;
+    G_emKeyToScancode[SDLK_F4] = KEY_SCAN_CODE_F4;
+    G_emKeyToScancode[SDLK_F5] = KEY_SCAN_CODE_F5;
+    G_emKeyToScancode[SDLK_F6] = KEY_SCAN_CODE_F6;
+    G_emKeyToScancode[SDLK_F7] = KEY_SCAN_CODE_F7;
+    G_emKeyToScancode[SDLK_F8] = KEY_SCAN_CODE_F8;
+    G_emKeyToScancode[SDLK_F9] = KEY_SCAN_CODE_F9;
+    G_emKeyToScancode[SDLK_F10] = KEY_SCAN_CODE_F10;
+    G_emKeyToScancode[SDLK_F11] = KEY_SCAN_CODE_F11;
+    G_emKeyToScancode[SDLK_F12] = KEY_SCAN_CODE_F12;
+
+    G_emKeyToScancode[SDLK_NUMLOCKCLEAR] = KEY_SCAN_CODE_NUM_LOCK;
+    G_emKeyToScancode[SDLK_CAPSLOCK] = KEY_SCAN_CODE_CAPS_LOCK;
+    G_emKeyToScancode[SDLK_SCROLLLOCK] = KEY_SCAN_CODE_SCROLL_LOCK;
+    G_emKeyToScancode[SDLK_RSHIFT] = KEY_SCAN_CODE_RIGHT_SHIFT;
+    G_emKeyToScancode[SDLK_LSHIFT] = KEY_SCAN_CODE_LEFT_SHIFT;
+    G_emKeyToScancode[SDLK_RCTRL] = KEY_SCAN_CODE_RIGHT_CTRL;
+    G_emKeyToScancode[SDLK_LCTRL] = KEY_SCAN_CODE_LEFT_CTRL;
+    G_emKeyToScancode[SDLK_RALT] = KEY_SCAN_CODE_ALT;
+    G_emKeyToScancode[SDLK_LALT] = KEY_SCAN_CODE_ALT;
+    G_emKeyToScancode[SDLK_PAUSE] = KEY_SCAN_CODE_PAUSE;
+
+    G_emKeyToScancodeReady = TRUE;
+}
+#define AA_KEY_SCANCODE_COUNT SDLK_LAST
+#define AA_KEY_SCANCODE(i) (G_emKeyToScancode[i])
+#else
+#define AA_KEY_SCANCODE_COUNT SDLK_LAST
+#define AA_KEY_SCANCODE(i) (G_sdlToScancode[i])
+#endif
+
 #include <direct.h>
 #define KEY_IS_DOWN 0x80
 #define KEY_IS_CHANGED 0x01
@@ -1349,7 +1424,12 @@ T_void KeyboardUpdate(E_Boolean updateBuffers)
     E_Boolean newValue ;
 
     DebugRoutine("KeyboardUpdate");
+#ifdef __EMSCRIPTEN__
+    if (!G_emKeyToScancodeReady)
+        IKeyboardBuildEmscriptenTable();
+#else
     DebugCheck(sizeof(G_sdlToScancode)==SDLK_LAST);
+#endif
     time = TickerGet() ;
     //GetKeyboardState(keys) ;
     keys = SDL_GetKeyState(NULL);
@@ -1361,13 +1441,13 @@ T_void KeyboardUpdate(E_Boolean updateBuffers)
     if (updateBuffers)  {
         for (i=1; i<SDLK_LAST; i++)  {
             // Skip keys we don't know how to process
-            if (G_sdlToScancode[i] == 0)
+            if (AA_KEY_SCANCODE(i) == 0)
                 continue;
 
             changed = (keys[i] != G_lastKeyState[i])?TRUE:FALSE ;
 
             //scanCode = MapVirtualKey(i, 0) ; // old windows version
-            scanCode = G_sdlToScancode[i];
+            scanCode = AA_KEY_SCANCODE(i);
 
             /* Record the state of the keypress */
             newValue = (keys[i])?TRUE:FALSE ;

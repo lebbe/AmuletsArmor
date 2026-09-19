@@ -101,7 +101,8 @@ static const char *IResolve(const char *path, char *out, size_t outSize)
         strcpy(real, name);
         if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
             char probe[CASEFILE_PATH_MAX];
-            snprintf(probe, sizeof(probe), "%s%s", out, name);
+            strcpy(probe, out);
+            strcat(probe, name);
             if (!IExists(probe))
                 IFindEntry(out, name, real, sizeof(real));
         }

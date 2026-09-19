@@ -23,7 +23,10 @@ set(AA_PLATFORM_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/Build/Windows/VC2013/AA/direct.cpp"
 )
 
-list(APPEND AA_PLATFORM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Source/Win32/ipx_client.cpp")
+if(NOT EMSCRIPTEN)
+    # IPX-over-UDP networking; browsers have no raw UDP.
+    list(APPEND AA_PLATFORM_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/Source/Win32/ipx_client.cpp")
+endif()
 
 add_executable(${AA_EXE_NAME}
     ${AA_CORE_SOURCES}
@@ -37,9 +40,11 @@ add_executable(aa-character-dump
 # The project uses uppercase .C files as C sources; force C language mode.
 set_source_files_properties(${AA_CORE_SOURCES} PROPERTIES LANGUAGE C)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(SDL REQUIRED IMPORTED_TARGET sdl)
-pkg_check_modules(SDL_NET REQUIRED IMPORTED_TARGET SDL2_net)
+if(NOT EMSCRIPTEN)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL REQUIRED IMPORTED_TARGET sdl)
+    pkg_check_modules(SDL_NET REQUIRED IMPORTED_TARGET SDL2_net)
+endif()
 
 target_include_directories(${AA_EXE_NAME}
     PRIVATE
@@ -53,11 +58,13 @@ target_include_directories(aa-character-dump
         "${CMAKE_CURRENT_SOURCE_DIR}/Include"
 )
 
-target_link_libraries(${AA_EXE_NAME}
-    PRIVATE
-        PkgConfig::SDL
-        PkgConfig::SDL_NET
-)
+if(NOT EMSCRIPTEN)
+    target_link_libraries(${AA_EXE_NAME}
+        PRIVATE
+            PkgConfig::SDL
+            PkgConfig::SDL_NET
+    )
+endif()
 
 target_compile_definitions(${AA_EXE_NAME}
     PRIVATE
@@ -71,7 +78,11 @@ target_compile_definitions(${AA_EXE_NAME}
         __fastcall=
 )
 
-target_compile_definitions(${AA_EXE_NAME} PRIVATE WIN_IPX=1)
+if(EMSCRIPTEN)
+    target_compile_definitions(${AA_EXE_NAME} PRIVATE WIN_IPX=0)
+else()
+    target_compile_definitions(${AA_EXE_NAME} PRIVATE WIN_IPX=1)
+endif()
 
 if(UNIX)
     target_compile_definitions(${AA_EXE_NAME} PRIVATE TARGET_UNIX=1)
@@ -124,12 +135,49 @@ if(AA_ENABLE_ASAN)
     target_link_options(${AA_EXE_NAME} PRIVATE -fsanitize=address)
 endif()
 
-set(AA_RUNTIME_DIR "${CMAKE_BINARY_DIR}/runtime")
+if(EMSCRIPTEN)
+    set(AA_WEB_INITIAL_MEMORY "64MB" CACHE STRING "Initial wasm heap (raise for AddressSanitizer)")
+    # The game blocks in its own loops (Sleep + frame update), so Asyncify
+    # turns those into yield points back to the browser.
+    # Old K&R-style C: recent clang turns these into hard errors.
+    target_compile_options(${AA_EXE_NAME} PRIVATE
+        -sUSE_SDL=1
+        -Wno-error=implicit-function-declaration
+        -Wno-error=int-conversion
+        -Wno-error=incompatible-pointer-types
+        -Wno-error=incompatible-function-pointer-types
+        -Wno-implicit-int
+    )
 
-add_custom_command(TARGET ${AA_EXE_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${AA_RUNTIME_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/Exe"
-        "${AA_RUNTIME_DIR}"
-    COMMENT "Copying runtime assets to ${AA_RUNTIME_DIR}"
-)
+    # Parse SDL's headers first with WIN32 hidden (see the file). emcc puts
+    # its own SDL include dir ahead of -I, so a shim SDL.h would not win.
+    target_compile_options(${AA_EXE_NAME} PRIVATE
+        "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/Build/Emscripten/aa_sdl_shim.h")
+
+    set_target_properties(${AA_EXE_NAME} PROPERTIES SUFFIX ".html")
+    target_link_options(${AA_EXE_NAME} PRIVATE
+        -sUSE_SDL=1
+        -sASYNCIFY
+        -sASYNCIFY_STACK_SIZE=131072
+        -sALLOW_MEMORY_GROWTH=1
+        -sINITIAL_MEMORY=${AA_WEB_INITIAL_MEMORY}
+        -sSTACK_SIZE=1MB
+        -sFORCE_FILESYSTEM=1
+        -sEXPORTED_RUNTIME_METHODS=FS,wasmTable
+        -lidbfs.js
+        "SHELL:--preload-file ${CMAKE_CURRENT_SOURCE_DIR}/Exe@/game"
+        "SHELL:--exclude-file *.exe" "SHELL:--exclude-file *.EXE"
+        "SHELL:--exclude-file *.bat" "SHELL:--exclude-file *.386"
+        "SHELL:--exclude-file *.dll"
+    )
+else()
+    set(AA_RUNTIME_DIR "${CMAKE_BINARY_DIR}/runtime")
+
+    add_custom_command(TARGET ${AA_EXE_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${AA_RUNTIME_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/Exe"
+            "${AA_RUNTIME_DIR}"
+        COMMENT "Copying runtime assets to ${AA_RUNTIME_DIR}"
+    )
+endif()
