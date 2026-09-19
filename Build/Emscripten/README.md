@@ -56,6 +56,14 @@ Then open <http://localhost:8080/amulets-armor.html> and click **Click to play**
 The click is required: browsers only allow audio after a user gesture, so the
 game is started from it.
 
+## Embedding
+
+The engine is built with `-sMODULARIZE=1 -sEXPORT_NAME=createAA`: `amulets-armor.js`
+defines a global `createAA(config)` factory instead of reading a global `Module`.
+Load the script, then call `createAA({ canvas, locateFile, preRun, ... })`; the
+factory fills in the same config object (`FS`, `addRunDependency`, ...).
+`shell.html` shows the whole pattern.
+
 ## Saved characters
 
 Characters (`S0000000/CHDATA0x`), `config.ini` and `CONTROL.TXT` are stored in the
