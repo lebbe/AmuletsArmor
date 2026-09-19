@@ -154,7 +154,10 @@ if(EMSCRIPTEN)
     target_compile_options(${AA_EXE_NAME} PRIVATE
         "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/Build/Emscripten/aa_sdl_shim.h")
 
-    set_target_properties(${AA_EXE_NAME} PROPERTIES SUFFIX ".html")
+    # Relink when the page shell changes (it is baked into the output .html).
+    set_target_properties(${AA_EXE_NAME} PROPERTIES
+        SUFFIX ".html"
+        LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Build/Emscripten/shell.html")
     target_link_options(${AA_EXE_NAME} PRIVATE
         -sUSE_SDL=1
         -sASYNCIFY

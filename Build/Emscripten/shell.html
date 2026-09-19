@@ -41,6 +41,7 @@
   </div>
   <div id="controls">
     <button id="mute" type="button" aria-pressed="false">Mute</button>
+    <span id="savenote"></span>
     <span>Game source: <a href="https://github.com/ExiguusEntertainment/AmuletsArmor">ExiguusEntertainment/AmuletsArmor</a> (GPL-3.0)</span>
   </div>
 </div>
@@ -79,6 +80,73 @@
   });
   document.addEventListener('visibilitychange', applyAudioState);
 
+  /* --- Saved characters and settings live in IndexedDB (Emscripten IDBFS) mounted at
+         /persist.  The game writes S0000000/CHDATA0x, config.ini and CONTROL.TXT relative
+         to /game, so those paths become symlinks into /persist.  Settings are seeded from
+         the packaged defaults the first time. --- */
+  var PERSIST = '/persist';
+  var persistOK = false, syncing = false, syncAgain = false;
+  var saveNote = $('savenote');
+
+  function rmtree(FS, path) {
+    var st;
+    try { st = FS.lstat(path); } catch (e) { return; }
+    if (FS.isDir(st.mode)) {
+      FS.readdir(path).forEach(function (n) { if (n !== '.' && n !== '..') rmtree(FS, path + '/' + n); });
+      FS.rmdir(path);
+    } else {
+      FS.unlink(path);
+    }
+  }
+  function exists(FS, p) { try { FS.lstat(p); return true; } catch (e) { return false; } }
+
+  function syncToBrowser() {
+    if (!persistOK) return Promise.resolve();
+    if (syncing) { syncAgain = true; return Promise.resolve(); }
+    syncing = true;
+    return new Promise(function (resolve) {
+      Module.FS.syncfs(false, function (err) {
+        syncing = false;
+        if (err && window.console) console.warn('Saving to browser storage failed:', err);
+        if (syncAgain) { syncAgain = false; syncToBrowser().then(resolve); } else resolve();
+      });
+    });
+  }
+  window.__aaSync = syncToBrowser;
+
+  function setupPersistence() {
+    var FS = Module.FS;
+    return new Promise(function (resolve) {
+      try {
+        FS.mkdirTree(PERSIST);
+        FS.mount(FS.filesystems.IDBFS, {}, PERSIST);
+      } catch (e) { resolve(false); return; }
+      FS.syncfs(true, function (err) {          /* load what is in IndexedDB */
+        if (err) { resolve(false); return; }
+        try {
+          if (!exists(FS, PERSIST + '/S0000000')) FS.mkdir(PERSIST + '/S0000000');
+          ['config.ini', 'CONTROL.TXT'].forEach(function (f) {
+            if (!exists(FS, PERSIST + '/' + f) && exists(FS, '/game/' + f))
+              FS.writeFile(PERSIST + '/' + f, FS.readFile('/game/' + f));
+          });
+          rmtree(FS, '/game/S0000000');
+          FS.symlink(PERSIST + '/S0000000', '/game/S0000000');
+          ['config.ini', 'CONTROL.TXT'].forEach(function (f) {
+            if (exists(FS, PERSIST + '/' + f)) {
+              rmtree(FS, '/game/' + f);
+              FS.symlink(PERSIST + '/' + f, '/game/' + f);
+            }
+          });
+          resolve(true);
+        } catch (e) { if (window.console) console.warn('Persistence setup failed:', e); resolve(false); }
+      });
+    });
+  }
+
+  setInterval(syncToBrowser, 5000);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) syncToBrowser(); });
+  window.addEventListener('pagehide', syncToBrowser);
+
   /* --- Loading: game data is fetched right away, but main() waits for the click, so
          the game opens its audio device inside a user gesture (browsers require that). --- */
   var started = false;
@@ -88,7 +156,15 @@
     printErr: function (t) { if (window.console) console.warn(t); },
     preRun: [function () {
       Module.addRunDependency('user-gesture');
-      window.__aaStart = function () { Module.removeRunDependency('user-gesture'); };
+      window.__aaStart = function () {
+        /* By now the game data has been unpacked into /game. */
+        setupPersistence().then(function (ok) {
+          persistOK = ok;
+          saveNote.textContent = ok ? 'Characters and settings are saved in this browser.'
+                                    : 'Browser storage is unavailable: nothing will be saved.';
+          Module.removeRunDependency('user-gesture');
+        });
+      };
     }],
     setStatus: function (text) {
       var m = /(.+) \((\d+(?:\.\d+)?)\/(\d+)\)/.exec(text);
