@@ -178,6 +178,8 @@ if(EMSCRIPTEN)
         "SHELL:--exclude-file *.exe" "SHELL:--exclude-file *.EXE"
         "SHELL:--exclude-file *.bat" "SHELL:--exclude-file *.386"
         "SHELL:--exclude-file *.dll"
+        # Music ships as the much smaller .OGG files; the raw .MUS are for DOS/native.
+        "SHELL:--exclude-file *.MUS"
     )
 else()
     set(AA_RUNTIME_DIR "${CMAKE_BINARY_DIR}/runtime")

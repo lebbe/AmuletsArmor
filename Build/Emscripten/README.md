@@ -41,7 +41,7 @@ Output in `out/web/`:
 |---|---|
 | `amulets-armor.html` | The page: click-to-play, mute button, save handling |
 | `amulets-armor.js` / `.wasm` | The game |
-| `amulets-armor.data` | Game data from `Exe/` (about 110 MB; `.exe`, `.bat`, `.dll`, `.386` are left out) |
+| `amulets-armor.data` | Game data from `Exe/` (about 44 MB; `.exe`, `.bat`, `.dll`, `.386` and the raw `.MUS` music are left out) |
 
 ## Run
 
@@ -119,3 +119,22 @@ in `main.c` under `__EMSCRIPTEN__`.
   a yield usually means a blocking call is not going through `emscripten_sleep`.
 - If your checkout path contains characters such as `&`, build through a symlink
   to it; CMake's generated shell commands do not quote them.
+
+## Music format
+
+Music lives in `Exe/AAMUSIC/`. The original `.MUS` files are raw 16-bit PCM
+(71 MB in total) and are still used by the DOS build. The SDL sound code
+(web, Windows, macOS) prefers `<name>.OGG` (Ogg Vorbis, mono, 22050 Hz, 4 MB in
+total), decoded with the public-domain [stb_vorbis](https://github.com/nothings/stb)
+(`Source/stb_vorbis.c`), and falls back to `.MUS` if no `.OGG` exists. The web
+build leaves the `.MUS` files out of the data package.
+
+The SDL player has only ever played the first half of each `.MUS` file, so the
+`.OGG` files contain that half. To regenerate them:
+
+```sh
+for f in Exe/AAMUSIC/*.MUS; do
+  n=${f%.MUS}; half=$(( $(stat -c %s $f) / 4 * 2 ))
+  head -c $half $f | ffmpeg -y -f s16le -ar 22050 -ac 1 -i - -c:a libvorbis -q:a 3 $n.OGG
+done
+```

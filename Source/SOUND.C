@@ -1394,10 +1394,58 @@ static T_void IBackgroundMusicDone(void *data)
     MemCheck(8203);
 }
 
+#define STB_VORBIS_NO_PUSHDATA_API
+#define STB_VORBIS_NO_STDIO
+#include "stb_vorbis.c"
+
+// Music is stored either as AAMUSIC\<name>.OGG (Ogg Vorbis, mono, 22050 Hz;
+// preferred, about 15 times smaller) or as the original raw 16-bit PCM
+// AAMUSIC\<name>.MUS. Returns a MemAlloc'd buffer of 16-bit samples and sets
+// *aLength to its size in bytes, or returns 0 if neither file exists.
+static T_void *ILoadMusicData(char *aName, T_word32 *aLength)
+{
+    char realFilename[80];
+    T_file file;
+    T_word32 size;
+    T_void *p_data = 0;
+
+    sprintf(realFilename, "AAMUSIC\\%s.OGG", aName);
+    file = FileOpen(realFilename, FILE_MODE_READ);
+    if (file != FILE_BAD) {
+        unsigned char *p_ogg;
+        short *p_pcm = 0;
+        int channels = 0, rate = 0, samples;
+
+        size = FileGetSize(realFilename);
+        p_ogg = (unsigned char *)MemAlloc(size);
+        FileRead(file, p_ogg, size);
+        FileClose(file);
+        samples = stb_vorbis_decode_memory(p_ogg, (int)size, &channels, &rate, &p_pcm);
+        MemFree(p_ogg);
+        if (samples > 0 && channels == 1) {
+            *aLength = samples * sizeof(short);
+            p_data = MemAlloc(*aLength);
+            memcpy(p_data, p_pcm, *aLength);
+        }
+        free(p_pcm);
+        if (p_data)
+            return p_data;
+    }
+
+    sprintf(realFilename, "AAMUSIC\\%s.MUS", aName);
+    file = FileOpen(realFilename, FILE_MODE_READ);
+    if (file != FILE_BAD) {
+        // Only the first half of a .MUS file has ever been played by this player.
+        *aLength = FileGetSize(realFilename) / 2;
+        p_data = MemAlloc(*aLength);
+        FileRead(file, p_data, *aLength);
+        FileClose(file);
+    }
+    return p_data;
+}
+
 T_void SoundSetBackgroundMusic(T_byte8 *filename)
 {
-    T_byte8 realFilename[80] ;
-    T_file file;
     T_word32 length;
     T_soundBuffer *p_buffer ;
     T_SDLSoundBuffer *p_sample;
@@ -1419,16 +1467,9 @@ T_void SoundSetBackgroundMusic(T_byte8 *filename)
             }
 
             // Load the new music (even if we are not going to play it yet)
-            sprintf(realFilename, "AAMUSIC\\%s.MUS", filename);
-            file = FileOpen(realFilename, FILE_MODE_READ) ;
-            if (file != FILE_BAD) {
-                length = FileGetSize(realFilename)/2;
-                G_backgroundMusic = MemAlloc(length);
+            G_backgroundMusic = ILoadMusicData((char *)filename, &length);
+            if (G_backgroundMusic) {
                 DebugCheck(G_backgroundMusic != 0);
-                MemCheck(8204);
-                FileRead(file, G_backgroundMusic, length);
-                MemCheck(8205);
-
                 G_backgroundMusicID = IAllocateBufferDirect(G_backgroundMusic, length) ;
                 if (G_backgroundMusicID != BUFFER_ID_BAD)  {
                     DebugCheck(G_backgroundMusicID < MAX_SOUND_CHANNELS) ;
@@ -1458,7 +1499,6 @@ T_void SoundSetBackgroundMusic(T_byte8 *filename)
                     p_sample->isPlaying = TRUE;
                 }
                 MemCheck(8210);
-                FileClose(file);
             }
         } else {
 #ifdef COMPILE_OPTION_OUTPUT_BAD_SOUNDS
