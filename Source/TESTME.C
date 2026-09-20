@@ -34,6 +34,9 @@
 #include "TICKER.H"
 #include "UPDATE.H"
 #include "VIEW.H"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #ifdef WIN32
 #include "Win32/ipx_client.h"
 #endif
@@ -447,6 +450,11 @@ extern void SleepMS(T_word32 sleepMS);
             TICKER_TIME_ROUTINE_ENDM("main", 500) ;
         }
     }
+
+#ifdef __EMSCRIPTEN__
+    /* Tell the embedding page we are done before legacy shutdown code runs. */
+    EM_ASM({ if (Module && Module.onExit) Module.onExit(0); });
+#endif
 
     SMMainFinish() ;
 
