@@ -6,7 +6,12 @@
 #endif
 
 #ifdef TARGET_UNIX
+/* CMake defines WIN32=1 for the whole game; SDL2 would mistake that for a
+ * Windows target and pull in Windows-only thread declarations. */
+#pragma push_macro("WIN32")
+#undef WIN32
 #include <SDL2/SDL_net.h>
+#pragma pop_macro("WIN32")
 #else
 #include "SDL_net.h"
 #endif

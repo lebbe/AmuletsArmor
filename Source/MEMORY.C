@@ -14,7 +14,7 @@
  *
  *<!-----------------------------------------------------------------------*/
 #ifndef NDEBUG
-#ifdef WIN32
+#if defined(WIN32) && !defined(TARGET_UNIX)
 #define _MEM_CHECK_FULL_
 #define _MEM_RECORD_ROUTINES_
 //#define COMPILE_OPTION_OUTPUT_ALLOCATION

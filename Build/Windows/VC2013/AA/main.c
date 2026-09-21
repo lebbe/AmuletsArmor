@@ -13,6 +13,9 @@
 #endif
 #include <SDL.h>
 #include "resource.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 #define CAP_SPEED_TO_FPS       0 // 70 // 0
 
@@ -48,12 +51,31 @@ static void HandleUnixSignal(int sig)
 
 void SleepMS(T_word32 aMS)
 {
-#ifdef TARGET_UNIX
+#if defined(__EMSCRIPTEN__)
+    /* Asyncify: hand control back to the browser. */
+    emscripten_sleep(aMS);
+#elif defined(TARGET_UNIX)
     usleep(aMS * 1000);
 #else
     Sleep(aMS);
 #endif
 }
+
+#ifdef __EMSCRIPTEN__
+/* Emscripten's SDL 1.2 lacks SDL_GetRelativeMouseState; accumulate the
+ * motion events' deltas ourselves (used by mouselook in MOUSEMOD.C). */
+static int G_relMouseX = 0;
+static int G_relMouseY = 0;
+
+Uint8 SDL_GetRelativeMouseState(int *x, int *y)
+{
+    if (x) *x = G_relMouseX;
+    if (y) *y = G_relMouseY;
+    G_relMouseX = 0;
+    G_relMouseY = 0;
+    return SDL_GetMouseState(NULL, NULL);
+}
+#endif
 
 void WindowsUpdateMouse(void)
 {
@@ -114,6 +136,12 @@ void WindowsUpdateEvents(void)
                     altPressed = FALSE;
                 }
                 break;
+#ifdef __EMSCRIPTEN__
+            case SDL_MOUSEMOTION:
+                G_relMouseX += event.motion.xrel;
+                G_relMouseY += event.motion.yrel;
+                break;
+#endif
 #if 0
             case SDL_MOUSEMOTION:
             case SDL_MOUSEBUTTONDOWN:
@@ -225,7 +253,39 @@ Sleep((1000/CAP_SPEED_TO_FPS) - (tick-lastTick));
     SDL_SetColors(largesurface, colors, 0, 256);
 
     // Blit the current surface from 320x200 to 640x400
-#ifdef TARGET_UNIX
+#if defined(__EMSCRIPTEN__)
+    /* Emscripten's SDL cannot blit the 8-bit palettised surface onto the
+     * 32-bit screen (it stays black), so do the palette lookup and the 2x
+     * scale ourselves and write the screen's pixels directly. */
+    {
+        Uint32 pal32[256];
+        Uint32 *out;
+        int pitch4;
+        int x;
+
+        for (i=0; i<256; i++)
+            pal32[i] = SDL_MapRGB(screen->format, colors[i].r, colors[i].g, colors[i].b);
+        if (SDL_MUSTLOCK(screen))
+            SDL_LockSurface(screen);
+        out = (Uint32 *)screen->pixels;
+        pitch4 = screen->pitch / 4;
+        for (y=0; y<200; y++) {
+            const unsigned char *srcLine = src + (y * 320);
+            Uint32 *row0 = out + ((y * 2) * pitch4);
+            Uint32 *row1 = row0 + pitch4;
+
+            for (x=0; x<320; x++) {
+                Uint32 c = pal32[srcLine[x]];
+                row0[x * 2] = c;
+                row0[x * 2 + 1] = c;
+                row1[x * 2] = c;
+                row1[x * 2 + 1] = c;
+            }
+        }
+        if (SDL_MUSTLOCK(screen))
+            SDL_UnlockSurface(screen);
+    }
+#elif defined(TARGET_UNIX)
     {
         int x;
         int pitch = largesurface->pitch;
@@ -265,9 +325,11 @@ Sleep((1000/CAP_SPEED_TO_FPS) - (tick-lastTick));
     }
 #endif
 
+#ifndef __EMSCRIPTEN__
     if (SDL_BlitSurface(largesurface, &largesrcrect, screen, &destrect)) {
         printf("Failed blit: %s\n", SDL_GetError());
     }
+#endif
     SDL_UpdateRect(screen, 0, 0, 0, 0);
     fps++;
 
@@ -283,7 +345,11 @@ Sleep((1000/CAP_SPEED_TO_FPS) - (tick-lastTick));
     WindowsUpdateMouse();
     KeyboardUpdate(TRUE) ;
 #if CAP_SPEED_TO_100_FPS
-    Sleep(1);
+    SleepMS(1);
+#endif
+#ifdef __EMSCRIPTEN__
+    /* Let the browser paint this frame and deliver input events. */
+    emscripten_sleep(0);
 #endif
     }
 }
@@ -299,6 +365,10 @@ int SDL_main(int argc, char *argv[])
     SDL_Color white = { 255, 255, 255, 0 };
     //SDL_Surface* icon;
 
+#ifdef __EMSCRIPTEN__
+    /* The game data is preloaded into /game. */
+    chdir("/game");
+#endif
 #ifndef TARGET_UNIX
     {
         HINSTANCE hLib = LoadLibrary("BlackBox.dll");
@@ -377,4 +447,13 @@ int SDL_main(int argc, char *argv[])
 
     return 0;
 }
+
+#if defined(TARGET_UNIX) && !defined(__APPLE__)
+/* SDL_main.h renames main to SDL_main; on Linux nothing links libSDLmain. */
+#undef main
+int main(int argc, char *argv[])
+{
+    return SDL_main(argc, argv);
+}
+#endif
 

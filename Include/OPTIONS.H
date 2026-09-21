@@ -199,9 +199,25 @@
 #pragma warning(disable:4100)
 //#include <windows.h>
 //#include <direct.h>
-#include <sdl.h>
+#include <SDL.h>
 // Delay in a number of milliseconds to delay
+#ifdef __EMSCRIPTEN__
+/* Emscripten aliases SDL_Delay to emscripten_sleep, but Asyncify does not
+ * treat the alias as a yielding import, so callers would keep running while
+ * the stack is unwinding.  Call emscripten_sleep directly.  (Declared here
+ * instead of including <emscripten.h>, which cannot be included from C++
+ * code inside extern "C".) */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void emscripten_sleep(unsigned int ms);
+#ifdef __cplusplus
+}
+#endif
+#define delay(x) emscripten_sleep((x) < 14 ? 14 : (x))
+#else
 #define delay(x) if (x < 14) { SDL_Delay(14); } else { SDL_Delay(x); }
+#endif
 /* The mouse driver is handled not in the mouse calls, but in the file 'winmouse.c' */
 #define OUTSIDE_MOUSE_DRIVER
 /* Remove C++ debug checks */

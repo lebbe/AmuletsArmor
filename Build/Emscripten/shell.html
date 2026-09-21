@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amulets &amp; Armor</title>
+<style>
+  :root { color-scheme: dark; --bg: #0d0b09; --fg: #e8dcc4; --dim: #8a7f6a; --accent: #c8962e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+               font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #stage { position: relative; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px 16px; }
+  #frame { cursor: none; position: relative; width: min(100%, calc((100vh - 70px) * 1.6)); aspect-ratio: 16 / 10; background: #000; }
+  canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; outline: none; }
+  #overlay { cursor: default; position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+             background: rgba(13, 11, 9, .88); text-align: center; padding: 16px; }
+  #overlay h1 { margin: 0; font-size: clamp(20px, 4vw, 34px); font-weight: 600; letter-spacing: .02em; }
+  #overlay p { margin: 0; color: var(--dim); max-width: 34em; }
+  #play { font: inherit; font-size: 18px; padding: 12px 34px; border-radius: 8px; border: 1px solid var(--accent);
+          background: var(--accent); color: #1a1408; cursor: pointer; }
+  #play:disabled { background: transparent; color: var(--dim); border-color: #3a3327; cursor: default; }
+  #bar { width: min(320px, 70%); height: 6px; background: #2a251c; border-radius: 3px; overflow: hidden; }
+  #bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #controls { display: flex; gap: 10px; align-items: center; color: var(--dim); font-size: 13px; }
+  #controls button { font: inherit; color: var(--fg); background: transparent; border: 1px solid #3a3327; border-radius: 6px; padding: 4px 12px; cursor: pointer; }
+  #controls button:hover { border-color: var(--accent); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="frame">
+    <canvas id="canvas" width="640" height="400" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+    <div id="overlay">
+      <h1>Amulets &amp; Armor</h1>
+      <p id="status">Downloading game data…</p>
+      <div id="bar"><i id="barfill"></i></div>
+      <button id="play" disabled>Loading…</button>
+      <p>Sound is on. Click the game window to give it keyboard focus.</p>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="mute" type="button" aria-pressed="false">Mute</button>
+    <span id="savenote"></span>
+    <span>Game source: <a href="https://github.com/ExiguusEntertainment/AmuletsArmor">ExiguusEntertainment/AmuletsArmor</a> (GPL-3.0)</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var playBtn = $('play'), overlay = $('overlay'), statusEl = $('status'), fill = $('barfill');
+  var muteBtn = $('mute');
+
+  /* --- Audio: remember the game's AudioContext so it can be muted/suspended. --- */
+  var contexts = window.__aaContexts = [];
+  var muted = false;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if (AC) {
+    var Wrapped = function () {
+      var c = new (Function.prototype.bind.apply(AC, [null].concat([].slice.call(arguments))))();
+      contexts.push(c);
+      return c;
+    };
+    Wrapped.prototype = AC.prototype;
+    window.AudioContext = window.webkitAudioContext = Wrapped;
+  }
+  function applyAudioState() {
+    var wantSuspended = muted || document.hidden;
+    contexts.forEach(function (c) {
+      if (wantSuspended && c.state === 'running') c.suspend();
+      else if (!wantSuspended && c.state === 'suspended') c.resume();
+    });
+  }
+  muteBtn.addEventListener('click', function () {
+    muted = !muted;
+    muteBtn.textContent = muted ? 'Unmute' : 'Mute';
+    muteBtn.setAttribute('aria-pressed', String(muted));
+    applyAudioState();
+  });
+  document.addEventListener('visibilitychange', applyAudioState);
+
+  /* --- Saved characters and settings live in IndexedDB (Emscripten IDBFS) mounted at
+         /persist.  The game writes S0000000/CHDATA0x, config.ini and CONTROL.TXT relative
+         to /game, so those paths become symlinks into /persist.  Settings are seeded from
+         the packaged defaults the first time. --- */
+  var PERSIST = '/persist';
+  var persistOK = false, syncing = false, syncAgain = false;
+  var saveNote = $('savenote');
+
+  function rmtree(FS, path) {
+    var st;
+    try { st = FS.lstat(path); } catch (e) { return; }
+    if (FS.isDir(st.mode)) {
+      FS.readdir(path).forEach(function (n) { if (n !== '.' && n !== '..') rmtree(FS, path + '/' + n); });
+      FS.rmdir(path);
+    } else {
+      FS.unlink(path);
+    }
+  }
+  function exists(FS, p) { try { FS.lstat(p); return true; } catch (e) { return false; } }
+
+  function syncToBrowser() {
+    if (!persistOK) return Promise.resolve();
+    if (syncing) { syncAgain = true; return Promise.resolve(); }
+    syncing = true;
+    return new Promise(function (resolve) {
+      Module.FS.syncfs(false, function (err) {
+        syncing = false;
+        if (err && window.console) console.warn('Saving to browser storage failed:', err);
+        if (syncAgain) { syncAgain = false; syncToBrowser().then(resolve); } else resolve();
+      });
+    });
+  }
+  window.__aaSync = syncToBrowser;
+
+  function setupPersistence() {
+    var FS = Module.FS;
+    return new Promise(function (resolve) {
+      try {
+        FS.mkdirTree(PERSIST);
+        FS.mount(FS.filesystems.IDBFS, {}, PERSIST);
+      } catch (e) { resolve(false); return; }
+      FS.syncfs(true, function (err) {          /* load what is in IndexedDB */
+        if (err) { resolve(false); return; }
+        try {
+          if (!exists(FS, PERSIST + '/S0000000')) FS.mkdir(PERSIST + '/S0000000');
+          ['config.ini', 'CONTROL.TXT'].forEach(function (f) {
+            if (!exists(FS, PERSIST + '/' + f) && exists(FS, '/game/' + f))
+              FS.writeFile(PERSIST + '/' + f, FS.readFile('/game/' + f));
+          });
+          rmtree(FS, '/game/S0000000');
+          FS.symlink(PERSIST + '/S0000000', '/game/S0000000');
+          ['config.ini', 'CONTROL.TXT'].forEach(function (f) {
+            if (exists(FS, PERSIST + '/' + f)) {
+              rmtree(FS, '/game/' + f);
+              FS.symlink(PERSIST + '/' + f, '/game/' + f);
+            }
+          });
+          resolve(true);
+        } catch (e) { if (window.console) console.warn('Persistence setup failed:', e); resolve(false); }
+      });
+    });
+  }
+
+  setInterval(syncToBrowser, 5000);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) syncToBrowser(); });
+  window.addEventListener('pagehide', syncToBrowser);
+
+  /* --- Loading: game data is fetched right away, but main() waits for the click, so
+         the game opens its audio device inside a user gesture (browsers require that). --- */
+  var started = false;
+  /* Configuration for the createAA() factory (the engine is built with MODULARIZE);
+     it is called after the engine script below. The factory fills in this same
+     object (FS, addRunDependency, ...). */
+  var Module = window.Module = {
+    canvas: $('canvas'),
+    print: function (t) { if (window.console) console.log(t); },
+    printErr: function (t) { if (window.console) console.warn(t); },
+    preRun: [function () {
+      Module.addRunDependency('user-gesture');
+      window.__aaStart = function () {
+        /* By now the game data has been unpacked into /game. */
+        setupPersistence().then(function (ok) {
+          persistOK = ok;
+          saveNote.textContent = ok ? 'Characters and settings are saved in this browser.'
+                                    : 'Browser storage is unavailable: nothing will be saved.';
+          Module.removeRunDependency('user-gesture');
+        });
+      };
+    }],
+    setStatus: function (text) {
+      var m = /(.+) \((\d+(?:\.\d+)?)\/(\d+)\)/.exec(text);
+      if (m) {
+        statusEl.textContent = m[1] + '…';
+        fill.style.width = (100 * m[2] / m[3]).toFixed(1) + '%';
+      } else if (text) {
+        statusEl.textContent = text;
+      }
+    },
+    monitorRunDependencies: function (left) {
+      /* Only our own 'user-gesture' dependency left: everything is downloaded. */
+      if (left <= 1 && !started) {
+        statusEl.textContent = 'Ready.';
+        fill.style.width = '100%';
+        playBtn.disabled = false;
+        playBtn.textContent = 'Click to play';
+      }
+    },
+    onAbort: function (what) {
+      statusEl.textContent = 'The game stopped unexpectedly: ' + what;
+      overlay.style.display = 'flex';
+    }
+  };
+
+  playBtn.addEventListener('click', function () {
+    if (started || playBtn.disabled) return;
+    started = true;
+    overlay.style.display = 'none';
+    window.__aaStart();
+    $('canvas').focus();
+  });
+  window.addEventListener('error', function (e) {
+    statusEl.textContent = 'Error: ' + (e.message || e);
+  });
+})();
+</script>
+{{{ SCRIPT }}}
+<script>createAA(window.Module);</script>
+</body>
+</html>
